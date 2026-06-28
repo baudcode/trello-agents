@@ -25,6 +25,7 @@ class ProjectConfig:
     trello_board_id: str
     github_repo: str
     worktree_base_dir: Path
+    backend: str = "trello"  # "trello" | "inmemory" | "sqlite"
     deploy_enabled: bool = False
     deploy_project_name: str = "app"
     deploy_registry: str = "ghcr.io"

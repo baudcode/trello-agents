@@ -73,7 +73,7 @@ def _build_dispatcher(
 async def _build_project_context(
     *,
     project: ProjectConfig,
-    trello_client: TrelloClient,
+    trello_client: TrelloClient | None,
     conn: aiosqlite.Connection,
     api_base: str,
     agent_max_concurrent: int,
@@ -105,7 +105,7 @@ async def _build_project_context(
             github_token=os.environ.get("GITHUB_TOKEN", ""),
         )
 
-    provider = await TrelloBoardProvider.create(trello_client, project.trello_board_id)
+    provider = await _build_provider(project, trello_client, conn)
     dispatcher = _build_dispatcher(
         conn=conn,
         board_id=provider._board_id,
@@ -131,6 +131,29 @@ async def _build_project_context(
     )
 
 
+async def _build_provider(
+    project: ProjectConfig,
+    trello_client: TrelloClient | None,
+    conn: aiosqlite.Connection,
+):
+    """Build the BoardProvider for a project, choosing the backend."""
+    if project.backend == "trello":
+        if trello_client is None:
+            raise RuntimeError(
+                f"Project '{project.id}' uses backend=trello but Trello credentials are missing"
+            )
+        return await TrelloBoardProvider.create(trello_client, project.trello_board_id)
+    if project.backend == "sqlite":
+        from agents_trello.adapters.local.provider import SqliteBoardProvider
+
+        return await SqliteBoardProvider.create(conn, project.trello_board_id)
+    if project.backend == "inmemory":
+        from agents_trello.adapters.inmemory.provider import InMemoryProvider
+
+        return InMemoryProvider(board_id=project.trello_board_id)
+    raise RuntimeError(f"Unknown backend: {project.backend}")
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     """Build and return the FastAPI application."""
     if config is None:
@@ -141,8 +164,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     if not config.projects:
         raise RuntimeError("No projects configured (projects.yaml or TRELLO_BOARD_ID required).")
 
-    # --- Shared Trello client (credentials are global) ---
-    trello_client = TrelloClient(config.trello_api_key, config.trello_api_token)
+    # --- Shared Trello client (only if any project actually needs it) ---
+    needs_trello = any(p.backend == "trello" for p in config.projects)
+    trello_client: TrelloClient | None = (
+        TrelloClient(config.trello_api_key, config.trello_api_token) if needs_trello else None
+    )
 
     # --- Notifications (shared) ---
     ntfy_topic = os.environ.get("NTFY_TOPIC", "")
@@ -264,7 +290,8 @@ def create_app(config: Config | None = None) -> FastAPI:
             except asyncio.CancelledError:
                 pass
         await conn.close()
-        await trello_client.close()
+        if trello_client is not None:
+            await trello_client.close()
         if notify and hasattr(notify, "close"):
             await notify.close()  # type: ignore[attr-defined]
         logger.info("Application shut down")
@@ -335,19 +362,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             return {"error": f"Invalid column: {column}. Use: Backlog, Todo"}
         if col not in (Column.BACKLOG, Column.TODO):
             return {"error": "Agents can only create cards in Backlog or Todo"}
-        list_id = ctx.provider._column_to_list_id[col]
-        resp = await ctx.provider._client._request(
-            "POST",
-            "cards",
-            params={"name": title, "desc": description, "idList": list_id},
-        )
-        card = resp.json()
+        task = await ctx.provider.create_task(title, description, col)
         return {
-            "id": card["id"],
-            "short_id": card["idShort"],
-            "title": card["name"],
-            "column": column,
-            "url": card["shortUrl"],
+            "id": task.id,
+            "short_id": task.short_id,
+            "title": task.title,
+            "column": task.column.value,
         }
 
     @app.post("/api/projects/{project_id}/cards/{card_id}/move-to-todo")
@@ -375,8 +395,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.delete("/api/projects/{project_id}/cards/{card_id}")
     async def delete_card(project_id: str, card_id: str) -> dict:
         ctx = _require_project(project_id)
+        from agents_trello.domain.models import TaskId
+
         try:
-            await ctx.provider._client.delete_card(card_id)
+            await ctx.provider.delete_task(TaskId(card_id))
         except Exception as exc:
             logger.error(
                 "delete_card_failed",
@@ -412,6 +434,31 @@ def create_app(config: Config | None = None) -> FastAPI:
                 for c in comments
             ],
         }
+
+    @app.post("/api/projects/{project_id}/cards/{card_id}/comments")
+    async def add_comment(project_id: str, card_id: str, request: Request) -> dict:
+        """Post a comment on a card. For mock backends, treated as a human
+        comment so the review loop is triggered on next poll."""
+        ctx = _require_project(project_id)
+        from agents_trello.domain.models import TaskId
+
+        body = await request.json()
+        text = body.get("text", "")
+        author_name = body.get("author_name", "Human")
+        if not text:
+            return {"error": "text is required"}
+        add_human = getattr(ctx.provider, "add_human_comment", None)
+        if add_human is not None:
+            comment = await add_human(TaskId(card_id), text, author_name=author_name)
+            return {
+                "status": "ok",
+                "id": comment.id,
+                "task_id": str(comment.task_id),
+                "text": comment.text,
+            }
+        # Fallback for Trello-backed projects: post as agent (won't trigger review loop)
+        await ctx.provider.post_comment(TaskId(card_id), text)
+        return {"status": "ok", "card_id": card_id}
 
     @app.get("/api/projects/{project_id}/board")
     async def get_board(project_id: str) -> dict:

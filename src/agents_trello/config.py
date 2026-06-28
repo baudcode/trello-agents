@@ -48,9 +48,16 @@ class Config:
     def from_env(cls) -> Config:
         load_dotenv()
         projects = _load_projects()
+        needs_trello = any(p.backend == "trello" for p in projects)
+        if needs_trello:
+            api_key = os.environ["TRELLO_API_KEY"]
+            api_token = os.environ["TRELLO_API_TOKEN"]
+        else:
+            api_key = os.environ.get("TRELLO_API_KEY", "")
+            api_token = os.environ.get("TRELLO_API_TOKEN", "")
         return cls(
-            trello_api_key=os.environ["TRELLO_API_KEY"],
-            trello_api_token=os.environ["TRELLO_API_TOKEN"],
+            trello_api_key=api_key,
+            trello_api_token=api_token,
             trello_webhook_secret=os.environ.get("TRELLO_WEBHOOK_SECRET", ""),
             github_webhook_secret=os.environ.get("GITHUB_WEBHOOK_SECRET", ""),
             agent_max_concurrent=int(os.environ.get("AGENT_MAX_CONCURRENT", "4")),
@@ -94,13 +101,28 @@ def _load_projects_from_yaml(path: Path) -> list[ProjectConfig]:
 
 
 def _project_from_yaml_entry(entry: dict) -> ProjectConfig:
+    backend = str(entry.get("backend", "trello")).lower()
+    if backend not in {"trello", "inmemory", "sqlite"}:
+        raise RuntimeError(f"Unknown backend '{backend}' (expected trello|inmemory|sqlite)")
+
     try:
         pid = str(entry["id"])
         name = str(entry.get("name", pid))
-        trello_board_id = str(entry["trello_board_id"])
         github_repo = str(entry["github_repo"])
     except KeyError as exc:
         raise RuntimeError(f"Project entry missing required field: {exc}") from exc
+
+    # Trello-backed projects must point at a real board; local backends
+    # may omit trello_board_id (we synthesize one from the project id).
+    raw_board_id = entry.get("trello_board_id")
+    if backend == "trello":
+        if not raw_board_id:
+            raise RuntimeError(
+                f"Project '{pid}' uses backend=trello but is missing trello_board_id"
+            )
+        trello_board_id = str(raw_board_id)
+    else:
+        trello_board_id = str(raw_board_id) if raw_board_id else f"local:{pid}"
 
     worktree_base_dir = Path(
         entry.get("worktree_base_dir") or f"~/agents/worktrees/{pid}"
@@ -114,6 +136,7 @@ def _project_from_yaml_entry(entry: dict) -> ProjectConfig:
         trello_board_id=trello_board_id,
         github_repo=github_repo,
         worktree_base_dir=worktree_base_dir,
+        backend=backend,
         deploy_enabled=deploy_enabled,
         deploy_project_name=deploy_project_name,
         deploy_registry=deploy_registry,

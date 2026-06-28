@@ -214,6 +214,31 @@ class TrelloBoardProvider:
     async def update_description(self, task_id: TaskId, description: str) -> None:
         await self._client.update_card(task_id, desc=description)
 
+    async def create_task(
+        self,
+        title: str,
+        description: str = "",
+        column: Column = Column.BACKLOG,
+    ) -> Task:
+        list_id = self._column_to_list_id[column]
+        resp = await self._client._request(
+            "POST",
+            "cards",
+            params={"name": title, "desc": description, "idList": list_id},
+        )
+        card = resp.json()
+        return Task(
+            id=TaskId(card["id"]),
+            short_id=str(card["idShort"]),
+            title=card["name"],
+            description=card.get("desc", ""),
+            column=column,
+            labels=[],
+        )
+
+    async def delete_task(self, task_id: TaskId) -> None:
+        await self._client.delete_card(task_id)
+
     async def poll_events(
         self,
         since_cursor: str | None = None,

@@ -49,7 +49,7 @@ projects:
     github_repo: org/repo
 """.lstrip(),
     )
-    with pytest.raises(RuntimeError, match="missing required field"):
+    with pytest.raises(RuntimeError, match="missing trello_board_id"):
         _load_projects_from_yaml(yaml)
 
 
@@ -73,6 +73,50 @@ projects:
 def test_yaml_empty(tmp_path: Path) -> None:
     yaml = _write_yaml(tmp_path / "projects.yaml", "projects: []\n")
     with pytest.raises(RuntimeError, match="at least one project"):
+        _load_projects_from_yaml(yaml)
+
+
+def test_sqlite_backend_no_board_id_required(tmp_path: Path) -> None:
+    yaml = _write_yaml(
+        tmp_path / "projects.yaml",
+        """
+projects:
+  - id: mock
+    backend: sqlite
+    github_repo: org/mock
+""".lstrip(),
+    )
+    projects = _load_projects_from_yaml(yaml)
+    assert projects[0].backend == "sqlite"
+    # Auto-synthesized board id
+    assert projects[0].trello_board_id == "local:mock"
+
+
+def test_inmemory_backend(tmp_path: Path) -> None:
+    yaml = _write_yaml(
+        tmp_path / "projects.yaml",
+        """
+projects:
+  - id: scratch
+    backend: inmemory
+    github_repo: org/scratch
+""".lstrip(),
+    )
+    projects = _load_projects_from_yaml(yaml)
+    assert projects[0].backend == "inmemory"
+
+
+def test_unknown_backend_rejected(tmp_path: Path) -> None:
+    yaml = _write_yaml(
+        tmp_path / "projects.yaml",
+        """
+projects:
+  - id: x
+    backend: redis
+    github_repo: org/x
+""".lstrip(),
+    )
+    with pytest.raises(RuntimeError, match="Unknown backend"):
         _load_projects_from_yaml(yaml)
 
 

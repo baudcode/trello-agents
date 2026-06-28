@@ -21,6 +21,15 @@ class BoardProvider(Protocol):
 
     async def update_description(self, task_id: TaskId, description: str) -> None: ...
 
+    async def create_task(
+        self,
+        title: str,
+        description: str = "",
+        column: Column = Column.BACKLOG,
+    ) -> Task: ...
+
+    async def delete_task(self, task_id: TaskId) -> None: ...
+
     async def poll_events(self, since_cursor: str | None = None) -> tuple[list[DomainEvent], str]:
         """Returns (events, new_cursor)."""
         ...
