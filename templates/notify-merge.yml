@@ -1,0 +1,44 @@
+# GitHub Actions workflow: Notify Merge
+# Install this file as .github/workflows/notify-merge.yml in your target repo.
+#
+# Triggers on pushes to main and notifies the agents-trello webhook
+# so it can move the associated Trello card to Done and clean up.
+
+name: Notify Merge
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  notify-merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need parent to detect merge commit
+
+      - name: Notify webhook – merged
+        env:
+          WEBHOOK_URL: ${{ secrets.TRELLO_AGENTS_WEBHOOK_URL }}   # e.g. https://your-server/github/webhook
+          WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+        run: |
+          # Try to find the PR URL from the merge commit message
+          PR_URL=$(gh pr list --repo "${{ github.repository }}" --state merged \
+            --search "${{ github.sha }}" --json url -q '.[0].url' 2>/dev/null || echo "")
+
+          PAYLOAD=$(jq -n \
+            --arg event "merged" \
+            --arg pr_url "$PR_URL" \
+            --arg merge_sha "${{ github.sha }}" \
+            '{event: $event, pr_url: $pr_url, merge_sha: $merge_sha}')
+
+          SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')"
+
+          curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-hub-signature-256: $SIGNATURE" \
+            -d "$PAYLOAD"

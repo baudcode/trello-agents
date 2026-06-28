@@ -1,0 +1,26 @@
+{
+  "id": "act_comment_001",
+  "type": "commentCard",
+  "date": "2026-04-28T15:00:00.000Z",
+  "data": {
+    "card": {
+      "id": "card_002",
+      "name": "Fix login bug",
+      "idShort": 43
+    },
+    "board": {
+      "id": "board_001",
+      "name": "Sprint Board"
+    },
+    "text": "Looks good, ready for merge.",
+    "action": {
+      "id": "comment_id_abc",
+      "text": "Looks good, ready for merge."
+    }
+  },
+  "memberCreator": {
+    "id": "member_002",
+    "username": "asmith",
+    "fullName": "Alice Smith"
+  }
+}

@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trello Board</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0079bf;
+    color: #172b4d;
+    min-height: 100vh;
+  }
+
+  header {
+    background: rgba(0,0,0,.15);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  header h1 {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  header button {
+    margin-left: auto;
+    background: rgba(255,255,255,.3);
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  header button:hover { background: rgba(255,255,255,.4); }
+
+  .board {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    align-items: flex-start;
+    min-height: calc(100vh - 44px);
+  }
+
+  .column {
+    background: #ebecf0;
+    border-radius: 3px;
+    min-width: 272px;
+    max-width: 272px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 68px);
+  }
+
+  .column-header {
+    padding: 10px 8px 8px;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .column-header .count {
+    background: rgba(0,0,0,.1);
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .card-list {
+    padding: 0 4px 4px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 4px;
+  }
+
+  .card-list.drag-over {
+    background: rgba(0,0,0,.06);
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(9,30,66,.25);
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    cursor: grab;
+    font-size: 14px;
+    transition: transform .1s;
+    position: relative;
+  }
+
+  .card:hover { background: #f4f5f7; }
+  .card.dragging { opacity: .5; transform: rotate(3deg); }
+  .card.selected {
+    background: #e4f0f6;
+    box-shadow: 0 0 0 2px #0079bf;
+  }
+  .card.selected:hover { background: #d4e6f1; }
+
+  .card-select {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #b3bac5;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card:hover .card-select, .card.selected .card-select { opacity: 1; }
+  .card-select.checked {
+    background: #0079bf;
+    border-color: #0079bf;
+  }
+  .card-select.checked::after {
+    content: "✓";
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card .title { padding-right: 22px; }
+
+  /* Bulk action bar */
+  .bulk-bar {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #172b4d;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.3);
+    display: none;
+    align-items: center;
+    gap: 12px;
+    z-index: 150;
+    font-size: 14px;
+  }
+  .bulk-bar.show { display: flex; }
+  .bulk-bar .count { font-weight: 600; }
+  .bulk-bar select {
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.3);
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .bulk-bar select option { color: #172b4d; }
+  .bulk-bar button {
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .bulk-bar button:hover { background: rgba(255,255,255,.25); }
+  .bulk-bar button.danger { background: #eb5a46; }
+  .bulk-bar button.danger:hover { background: #cf513d; }
+  .bulk-bar button:disabled { opacity: .6; cursor: default; }
+
+  .card .labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .card .label {
+    display: inline-block;
+    height: 8px;
+    min-width: 40px;
+    border-radius: 4px;
+  }
+
+  .label-green { background: #61bd4f; }
+  .label-yellow { background: #f2d600; }
+  .label-orange { background: #ff9f1a; }
+  .label-red { background: #eb5a46; }
+  .label-purple { background: #c377e0; }
+  .label-blue { background: #0079bf; }
+  .label-default { background: #b3bac5; }
+
+  .card .title { line-height: 1.3; }
+
+  .card .card-id {
+    font-size: 11px;
+    color: #5e6c84;
+    margin-top: 4px;
+  }
+
+  .add-card-form { padding: 4px; }
+
+  .add-card-btn {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 8px;
+    border-radius: 3px;
+    color: #5e6c84;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .add-card-btn:hover { background: rgba(9,30,66,.08); color: #172b4d; }
+
+  .add-card-form textarea {
+    width: 100%;
+    border: none;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(9,30,66,.25);
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: none;
+    min-height: 54px;
+    outline: none;
+  }
+
+  .add-card-form .form-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .btn-primary {
+    background: #0079bf;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .btn-primary:hover { background: #026aa7; }
+  .btn-primary:disabled { opacity: .6; cursor: default; }
+
+  .btn-cancel {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #6b778c;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: #172b4d;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 3px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .toast.show { opacity: 1; }
+
+  .spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    margin-left: 8px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Card detail modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 200;
+    overflow-y: auto;
+    padding: 48px 16px;
+  }
+  .modal-overlay.show { display: block; }
+
+  .modal {
+    background: #f4f5f7;
+    border-radius: 3px;
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 16px 20px 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    position: relative;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: #6b778c;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 3px;
+  }
+  .modal-close:hover { background: rgba(9,30,66,.08); color: #172b4d; }
+
+  .modal h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #172b4d;
+    padding-right: 32px;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  .modal .meta {
+    color: #5e6c84;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .modal h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #172b4d;
+    margin: 16px 0 6px;
+  }
+  .modal .description {
+    background: #fff;
+    border-radius: 3px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #172b4d;
+    min-height: 32px;
+  }
+  .modal .description.empty { color: #5e6c84; font-style: italic; }
+
+  /* Markdown content */
+  .md { line-height: 1.5; }
+  .md > *:first-child { margin-top: 0; }
+  .md > *:last-child { margin-bottom: 0; }
+  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+    margin: 16px 0 8px;
+    font-weight: 600;
+    color: #172b4d;
+    line-height: 1.25;
+  }
+  .md h1 { font-size: 22px; border-bottom: 1px solid #dfe1e6; padding-bottom: 4px; }
+  .md h2 { font-size: 18px; border-bottom: 1px solid #dfe1e6; padding-bottom: 4px; }
+  .md h3 { font-size: 16px; }
+  .md h4, .md h5, .md h6 { font-size: 14px; }
+  .md p { margin: 6px 0; }
+  .md ul, .md ol { padding-left: 24px; margin: 6px 0; }
+  .md li { margin: 2px 0; }
+  .md li > input[type="checkbox"] { margin-right: 6px; }
+  .md code {
+    background: #f4f5f7;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px;
+    color: #172b4d;
+  }
+  .md pre {
+    background: #f4f5f7;
+    border: 1px solid #dfe1e6;
+    border-radius: 3px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+    font-size: 12.5px;
+  }
+  .md pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  .md blockquote {
+    border-left: 3px solid #dfe1e6;
+    color: #5e6c84;
+    margin: 8px 0;
+    padding: 2px 0 2px 12px;
+  }
+  .md a { color: #0079bf; text-decoration: none; }
+  .md a:hover { text-decoration: underline; }
+  .md table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+  .md th, .md td {
+    border: 1px solid #dfe1e6;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .md th { background: #f4f5f7; }
+  .md hr {
+    border: none;
+    border-top: 1px solid #dfe1e6;
+    margin: 12px 0;
+  }
+  .md img { max-width: 100%; }
+
+  /* Modal actions */
+  .modal-actions {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid #dfe1e6;
+    display: flex;
+    gap: 8px;
+  }
+  .btn-danger {
+    background: #eb5a46;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .btn-danger:hover { background: #cf513d; }
+  .btn-danger:disabled { opacity: .6; cursor: default; }
+  .modal .comments { display: flex; flex-direction: column; gap: 8px; }
+  .modal .comment {
+    background: #fff;
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  .modal .comment .author {
+    font-weight: 600;
+    color: #172b4d;
+    margin-right: 6px;
+  }
+  .modal .comment .date {
+    color: #5e6c84;
+    font-size: 12px;
+  }
+  .modal .comment .text {
+    margin-top: 4px;
+    color: #172b4d;
+  }
+  .modal .empty-state {
+    color: #5e6c84;
+    font-style: italic;
+    font-size: 13px;
+  }
+  .modal .label-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .modal .label-row .label {
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agents Trello</h1>
+  <select id="projectSelect" onchange="onProjectChange()"
+          style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);
+                 padding:5px 8px;border-radius:3px;font-size:13px;cursor:pointer;margin-left:8px;">
+  </select>
+  <button onclick="loadBoard()">Refresh</button>
+</header>
+
+<style>
+  #projectSelect option { color: #172b4d; }
+</style>
+
+<div class="board" id="board"></div>
+<div class="toast" id="toast"></div>
+
+<div class="bulk-bar" id="bulkBar">
+  <span class="count" id="bulkCount">0 selected</span>
+  <select id="bulkMoveSelect">
+    <option value="">Move to…</option>
+  </select>
+  <button class="danger" onclick="bulkDelete()">Delete</button>
+  <button onclick="clearSelection()">Clear</button>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="onOverlayClick(event)">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeCard()">&times;</button>
+    <div id="modalBody">Loading...</div>
+  </div>
+</div>
+
+<script>
+const COLUMNS = ["Backlog", "Todo", "InProgress", "Review", "Done"];
+const LABEL_COLORS = {
+  green: "label-green", yellow: "label-yellow", orange: "label-orange",
+  red: "label-red", purple: "label-purple", blue: "label-blue"
+};
+
+let boardData = {};
+let selected = new Set();
+let currentProjectId = null;
+let projects = [];
+
+function projectUrl(suffix) {
+  if (!currentProjectId) throw new Error("No project selected");
+  return `/api/projects/${encodeURIComponent(currentProjectId)}${suffix}`;
+}
+
+async function loadProjects() {
+  const resp = await fetch("/api/projects");
+  const data = await resp.json();
+  projects = data.projects || [];
+  const sel = document.getElementById("projectSelect");
+  sel.innerHTML = "";
+  for (const p of projects) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name || p.id;
+    sel.appendChild(opt);
+  }
+  const stored = localStorage.getItem("currentProjectId");
+  if (stored && projects.some(p => p.id === stored)) {
+    currentProjectId = stored;
+  } else if (projects.length > 0) {
+    currentProjectId = projects[0].id;
+  } else {
+    currentProjectId = null;
+  }
+  if (currentProjectId) sel.value = currentProjectId;
+}
+
+function onProjectChange() {
+  const sel = document.getElementById("projectSelect");
+  const next = sel.value;
+  if (!next || next === currentProjectId) return;
+  currentProjectId = next;
+  localStorage.setItem("currentProjectId", next);
+  // Reset per-project state
+  boardData = {};
+  selected.clear();
+  closeCard();
+  updateSelectionUI();
+  loadBoard();
+}
+
+function labelClass(label) {
+  const lower = label.toLowerCase();
+  for (const [key, cls] of Object.entries(LABEL_COLORS)) {
+    if (lower.includes(key)) return cls;
+  }
+  return "label-default";
+}
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+async function loadBoard() {
+  if (!currentProjectId) return;
+  try {
+    const resp = await fetch(projectUrl("/board"));
+    const data = await resp.json();
+    boardData = {};
+    for (const col of COLUMNS) boardData[col] = [];
+    const liveIds = new Set();
+    for (const card of data.cards || []) {
+      liveIds.add(card.id);
+      const col = card.column || "Backlog";
+      if (boardData[col]) boardData[col].push(card);
+    }
+    // Drop stale selections (deleted cards)
+    for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
+    render();
+    updateSelectionUI();
+  } catch (err) {
+    toast("Failed to load board");
+    console.error(err);
+  }
+}
+
+function render() {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  for (const col of COLUMNS) {
+    const cards = boardData[col] || [];
+    const colEl = document.createElement("div");
+    colEl.className = "column";
+    colEl.innerHTML = `
+      <div class="column-header">
+        ${col} <span class="count">${cards.length}</span>
+      </div>
+      <div class="card-list" data-column="${col}"
+           ondrop="onDrop(event)" ondragover="onDragOver(event)"
+           ondragleave="onDragLeave(event)">
+        ${cards.map(c => cardHTML(c)).join("")}
+      </div>
+      ${col === "Backlog" || col === "Todo" ? addCardHTML(col) : ""}
+    `;
+    board.appendChild(colEl);
+  }
+}
+
+function cardHTML(card) {
+  const labels = (card.labels || []).map(l =>
+    `<span class="label ${labelClass(l)}" title="${l}"></span>`
+  ).join("");
+  const isSelected = selected.has(card.id);
+  return `
+    <div class="card${isSelected ? ' selected' : ''}" draggable="true" data-id="${card.id}"
+         onclick="onCardClick(event, '${card.id}')"
+         ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">
+      <div class="card-select${isSelected ? ' checked' : ''}"
+           onclick="toggleSelect(event, '${card.id}')"
+           title="Select card"></div>
+      ${labels ? `<div class="labels">${labels}</div>` : ""}
+      <div class="title">${escapeHtml(card.title)}</div>
+      <div class="card-id">#${card.short_id}</div>
+    </div>
+  `;
+}
+
+function onCardClick(ev, cardId) {
+  // Don't open while dragging
+  if (dragCardId) return;
+  // Modifier-click also toggles selection
+  if (ev.metaKey || ev.ctrlKey || ev.shiftKey) {
+    toggleSelect(ev, cardId);
+    return;
+  }
+  openCard(cardId);
+}
+
+function toggleSelect(ev, cardId) {
+  ev.stopPropagation();
+  ev.preventDefault();
+  if (selected.has(cardId)) selected.delete(cardId);
+  else selected.add(cardId);
+  updateSelectionUI();
+}
+
+function updateSelectionUI() {
+  // Toggle classes on existing card DOM without full re-render
+  document.querySelectorAll(".card").forEach(el => {
+    const id = el.dataset.id;
+    const isSel = selected.has(id);
+    el.classList.toggle("selected", isSel);
+    const cb = el.querySelector(".card-select");
+    if (cb) cb.classList.toggle("checked", isSel);
+  });
+  const bar = document.getElementById("bulkBar");
+  const count = selected.size;
+  if (count > 0) {
+    bar.classList.add("show");
+    document.getElementById("bulkCount").textContent =
+      `${count} selected`;
+  } else {
+    bar.classList.remove("show");
+  }
+}
+
+function clearSelection() {
+  selected.clear();
+  updateSelectionUI();
+}
+
+function populateMoveSelect() {
+  const sel = document.getElementById("bulkMoveSelect");
+  if (sel.options.length > 1) return; // already populated
+  for (const col of COLUMNS) {
+    const opt = document.createElement("option");
+    opt.value = col;
+    opt.textContent = col;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", async () => {
+    const target = sel.value;
+    sel.value = "";
+    if (!target) return;
+    await bulkMove(target);
+  });
+}
+
+async function bulkMove(targetCol) {
+  if (selected.size === 0) return;
+  const ids = [...selected];
+  toast(`Moving ${ids.length}…`);
+  const results = await Promise.allSettled(ids.map(id =>
+    fetch(projectUrl(`/cards/${id}/move`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ column: targetCol }),
+    }).then(r => r.json())
+  ));
+  const failed = results.filter(r =>
+    r.status === "rejected" || (r.value && r.value.error)
+  ).length;
+  if (failed) toast(`Moved ${ids.length - failed}/${ids.length} — ${failed} failed`);
+  else toast(`Moved ${ids.length} to ${targetCol}`);
+  clearSelection();
+  await loadBoard();
+}
+
+async function bulkDelete() {
+  if (selected.size === 0) return;
+  const ids = [...selected];
+  if (!confirm(`Delete ${ids.length} card${ids.length > 1 ? "s" : ""}? This cannot be undone.`)) return;
+  toast(`Deleting ${ids.length}…`);
+  const results = await Promise.allSettled(ids.map(id =>
+    fetch(projectUrl(`/cards/${id}`), { method: "DELETE" }).then(r => r.json())
+  ));
+  const failed = results.filter(r =>
+    r.status === "rejected" || (r.value && r.value.error)
+  ).length;
+  if (failed) toast(`Deleted ${ids.length - failed}/${ids.length} — ${failed} failed`);
+  else toast(`Deleted ${ids.length} cards`);
+  clearSelection();
+  await loadBoard();
+}
+
+function addCardHTML(col) {
+  return `
+    <div class="add-card-form" data-col="${col}">
+      <button class="add-card-btn" onclick="showAddForm(this, '${col}')">+ Add a card</button>
+    </div>
+  `;
+}
+
+function showAddForm(btn, col) {
+  const wrapper = btn.parentElement;
+  wrapper.innerHTML = `
+    <textarea placeholder="Enter a title for this card..." autofocus
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitCard(this,'${col}')}"></textarea>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="submitCard(this.parentElement.previousElementSibling,'${col}')">Add Card</button>
+      <button class="btn-cancel" onclick="cancelAdd(this, '${col}')">&times;</button>
+    </div>
+  `;
+  wrapper.querySelector("textarea").focus();
+}
+
+function cancelAdd(btn, col) {
+  const wrapper = btn.closest(".add-card-form");
+  wrapper.innerHTML = `<button class="add-card-btn" onclick="showAddForm(this, '${col}')">+ Add a card</button>`;
+}
+
+async function submitCard(textarea, col) {
+  const title = textarea.value.trim();
+  if (!title) return;
+  const submitBtn = textarea.nextElementSibling?.querySelector(".btn-primary");
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const resp = await fetch(projectUrl(`/cards?title=${encodeURIComponent(title)}&column=${encodeURIComponent(col)}`), { method: "POST" });
+    const data = await resp.json();
+    if (data.error) { toast(data.error); return; }
+    toast(`Card created: #${data.short_id}`);
+    await loadBoard();
+    if (data.id) openCard(data.id);
+  } catch (err) {
+    toast("Failed to create card");
+    console.error(err);
+  }
+}
+
+/* Card detail modal */
+async function openCard(cardId) {
+  const overlay = document.getElementById("modalOverlay");
+  const body = document.getElementById("modalBody");
+  body.innerHTML = "Loading...";
+  overlay.classList.add("show");
+  try {
+    const resp = await fetch(projectUrl(`/cards/${cardId}`));
+    const data = await resp.json();
+    if (data.error) {
+      body.innerHTML = `<p>${escapeHtml(data.error)}</p>`;
+      return;
+    }
+    body.innerHTML = renderCardDetail(data);
+  } catch (err) {
+    body.innerHTML = "<p>Failed to load card.</p>";
+    console.error(err);
+  }
+}
+
+function decodeEscapes(text) {
+  if (!text) return text;
+  // Decode \uHHHH (single code point)
+  text = text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16))
+  );
+  // Decode runs of \xHH as UTF-8 byte sequences
+  text = text.replace(/(?:\\x[0-9a-fA-F]{2})+/g, (match) => {
+    const bytes = [];
+    for (let i = 0; i < match.length; i += 4) {
+      bytes.push(parseInt(match.substr(i + 2, 2), 16));
+    }
+    try {
+      return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(bytes));
+    } catch {
+      return match;
+    }
+  });
+  return text;
+}
+
+function renderMarkdown(text) {
+  if (!text) return "";
+  try {
+    const decoded = decodeEscapes(text);
+    const html = marked.parse(decoded, { gfm: true, breaks: true });
+    return DOMPurify.sanitize(html);
+  } catch (err) {
+    console.error("markdown render failed", err);
+    return escapeHtml(text);
+  }
+}
+
+function renderCardDetail(card) {
+  const labels = (card.labels || []).map(l => {
+    const cls = labelClass(l);
+    const color = cls.replace("label-", "");
+    return `<span class="label" data-color="${color}">${escapeHtml(l)}</span>`;
+  }).join("");
+  const labelRow = labels ? `<div class="label-row">${labels}</div>` : "";
+  const desc = card.description?.trim()
+    ? `<div class="description md">${renderMarkdown(card.description)}</div>`
+    : `<div class="description empty">No description.</div>`;
+  const comments = (card.comments || []).length
+    ? card.comments.map(c => `
+        <div class="comment">
+          <span class="author">${escapeHtml(c.author_name || "unknown")}</span>
+          <span class="date">${formatDate(c.created_at)}</span>
+          <div class="text md">${renderMarkdown(c.text)}</div>
+        </div>
+      `).join("")
+    : `<div class="empty-state">No comments yet.</div>`;
+
+  // Paint label backgrounds + highlight code blocks after insert
+  setTimeout(() => {
+    const map = {
+      green: "#61bd4f", yellow: "#f2d600", orange: "#ff9f1a",
+      red: "#eb5a46", purple: "#c377e0", blue: "#0079bf", default: "#b3bac5"
+    };
+    document.querySelectorAll("#modalBody .label-row .label").forEach(el => {
+      el.style.background = map[el.dataset.color] || map.default;
+    });
+    if (window.hljs) {
+      document.querySelectorAll("#modalBody pre code").forEach(el => {
+        try { window.hljs.highlightElement(el); } catch (e) { /* ignore */ }
+      });
+    }
+  }, 0);
+
+  return `
+    <h2>${escapeHtml(card.title)}</h2>
+    <div class="meta">#${escapeHtml(card.short_id)} · ${escapeHtml(card.column)}</div>
+    ${labelRow}
+    <h3>Description</h3>
+    ${desc}
+    <h3>Comments</h3>
+    <div class="comments">${comments}</div>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="deleteCard('${card.id}', '${escapeAttr(card.title)}')">Delete card</button>
+    </div>
+  `;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+async function deleteCard(cardId, title) {
+  if (!confirm(`Delete card "${title}"? This cannot be undone.`)) return;
+  try {
+    const resp = await fetch(projectUrl(`/cards/${cardId}`), { method: "DELETE" });
+    const data = await resp.json();
+    if (data.error) { toast(data.error); return; }
+    toast("Card deleted");
+    closeCard();
+    await loadBoard();
+  } catch (err) {
+    toast("Failed to delete card");
+    console.error(err);
+  }
+}
+
+function closeCard() {
+  document.getElementById("modalOverlay").classList.remove("show");
+}
+
+function onOverlayClick(ev) {
+  if (ev.target.id === "modalOverlay") closeCard();
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString();
+  } catch { return iso; }
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") closeCard();
+});
+
+/* Drag & drop */
+let dragCardId = null;
+
+function onDragStart(ev) {
+  dragCardId = ev.target.dataset.id;
+  ev.target.classList.add("dragging");
+  ev.dataTransfer.effectAllowed = "move";
+}
+
+function onDragEnd(ev) {
+  ev.target.classList.remove("dragging");
+  dragCardId = null;
+  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+}
+
+function onDragOver(ev) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+  ev.currentTarget.classList.add("drag-over");
+}
+
+function onDragLeave(ev) {
+  ev.currentTarget.classList.remove("drag-over");
+}
+
+async function onDrop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove("drag-over");
+  const targetCol = ev.currentTarget.dataset.column;
+  if (!dragCardId || !targetCol) return;
+
+  // Move card via API
+  try {
+    const resp = await fetch(projectUrl(`/cards/${dragCardId}/move`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ column: targetCol })
+    });
+    const data = await resp.json();
+    if (data.error) { toast(data.error); return; }
+    toast(`Moved to ${targetCol}`);
+    await loadBoard();
+  } catch (err) {
+    toast("Failed to move card");
+    console.error(err);
+  }
+}
+
+function escapeHtml(text) {
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// Initial load
+populateMoveSelect();
+(async () => {
+  try {
+    await loadProjects();
+  } catch (err) {
+    toast("Failed to load projects");
+    console.error(err);
+    return;
+  }
+  if (currentProjectId) await loadBoard();
+})();
+// Auto-refresh every 15 seconds
+setInterval(() => { if (currentProjectId) loadBoard(); }, 15000);
+</script>
+</body>
+</html>

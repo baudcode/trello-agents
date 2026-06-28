@@ -1,0 +1,55 @@
+# GitHub Actions workflow: Deploy Preview
+# Install this file as .github/workflows/deploy-preview.yml in your target repo.
+#
+# Triggers on pushes to feat/* branches, builds a deploy preview, and
+# notifies the agents-trello webhook so it can post the URL on the Trello card.
+
+name: Deploy Preview
+
+on:
+  push:
+    branches:
+      - "feat/*"
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # Replace these placeholder steps with your actual build & deploy
+      # ---------------------------------------------------------------
+      - name: Build
+        run: echo "TODO – replace with your build command"
+
+      - name: Deploy to preview environment
+        id: deploy
+        run: |
+          # TODO – replace with your deploy command.
+          # Set the DEPLOY_URL output so the notification step can use it.
+          echo "deploy_url=https://preview.example.com/${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------
+      # Notify the agents-trello webhook
+      # ---------------------------------------------------------------
+      - name: Notify webhook – deployment ready
+        env:
+          WEBHOOK_URL: ${{ secrets.TRELLO_AGENTS_WEBHOOK_URL }}   # e.g. https://your-server/github/webhook
+          WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+        run: |
+          PR_URL=$(gh pr view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json url -q .url 2>/dev/null || echo "")
+          PAYLOAD=$(jq -n \
+            --arg event "deployment_ready" \
+            --arg pr_url "$PR_URL" \
+            --arg deploy_url "${{ steps.deploy.outputs.deploy_url }}" \
+            '{event: $event, pr_url: $pr_url, deploy_url: $deploy_url}')
+
+          SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')"
+
+          curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-hub-signature-256: $SIGNATURE" \
+            -d "$PAYLOAD"

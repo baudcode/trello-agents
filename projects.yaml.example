@@ -1,0 +1,26 @@
+# projects.yaml — multi-project registry for agents-trello.
+#
+# Each entry is one project: a Trello board paired with a GitHub repo.
+# Trello + GitHub credentials live in .env (shared across projects); per-project
+# config lives here.
+#
+# Required fields per project: id, trello_board_id, github_repo
+# Optional:
+#   - name (defaults to id)
+#   - worktree_base_dir (defaults to ~/agents/worktrees/<id>)
+#   - deploy_enabled, deploy_project_name, deploy_registry
+
+projects:
+  - id: app
+    name: Main App
+    trello_board_id: REPLACE_WITH_TRELLO_BOARD_ID_1
+    github_repo: my-org/main-app
+    worktree_base_dir: ~/agents/worktrees/app
+    deploy_enabled: false
+
+  - id: docs
+    name: Docs Site
+    trello_board_id: REPLACE_WITH_TRELLO_BOARD_ID_2
+    github_repo: my-org/docs-site
+    worktree_base_dir: ~/agents/worktrees/docs
+    deploy_enabled: false

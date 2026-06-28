@@ -1,0 +1,24 @@
+{
+  "id": "act_rename_001",
+  "type": "updateCard",
+  "date": "2026-04-28T16:00:00.000Z",
+  "data": {
+    "card": {
+      "id": "card_001",
+      "name": "Implement OAuth2 user auth",
+      "idShort": 42
+    },
+    "board": {
+      "id": "board_001",
+      "name": "Sprint Board"
+    },
+    "old": {
+      "name": "Implement user auth"
+    }
+  },
+  "memberCreator": {
+    "id": "member_001",
+    "username": "jdoe",
+    "fullName": "Jane Doe"
+  }
+}

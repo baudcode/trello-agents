@@ -1,0 +1,32 @@
+{
+  "id": "act_move_001",
+  "type": "updateCard",
+  "date": "2026-04-28T14:30:00.000Z",
+  "data": {
+    "card": {
+      "id": "card_001",
+      "name": "Implement user auth",
+      "idShort": 42
+    },
+    "board": {
+      "id": "board_001",
+      "name": "Sprint Board"
+    },
+    "listBefore": {
+      "id": "list_todo",
+      "name": "Todo"
+    },
+    "listAfter": {
+      "id": "list_inprogress",
+      "name": "InProgress"
+    },
+    "old": {
+      "idList": "list_todo"
+    }
+  },
+  "memberCreator": {
+    "id": "member_001",
+    "username": "jdoe",
+    "fullName": "Jane Doe"
+  }
+}

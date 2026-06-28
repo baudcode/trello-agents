@@ -1,0 +1,25 @@
+{
+  "id": "act_create_001",
+  "type": "createCard",
+  "date": "2026-04-28T10:00:00.000Z",
+  "data": {
+    "card": {
+      "id": "card_003",
+      "name": "Set up CI pipeline",
+      "idShort": 44
+    },
+    "board": {
+      "id": "board_001",
+      "name": "Sprint Board"
+    },
+    "list": {
+      "id": "list_backlog",
+      "name": "Backlog"
+    }
+  },
+  "memberCreator": {
+    "id": "member_001",
+    "username": "jdoe",
+    "fullName": "Jane Doe"
+  }
+}

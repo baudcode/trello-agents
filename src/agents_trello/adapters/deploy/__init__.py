@@ -1,0 +1,1 @@
+"""Feature branch deployment adapter."""
